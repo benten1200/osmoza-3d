@@ -1,0 +1,639 @@
+<!doctype html>
+<html lang="sq">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+</head>
+<body>
+<title>Osmoza 3D</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: skena 3D mbush ekranin si nje dritare mikroskopi; paneli i instrumenteve rri anash (poshte ne telefon). */
+:root{
+  color-scheme:dark;
+  --bg:#061119; --stage-a:#0d2735; --stage-b:#040b11;
+  --panel:#0a171f; --raise:#10222d; --line:#1d3643;
+  --ink:#e4eff2; --muted:#89a4ae;
+  --water:#5cc8f5; --solute:#ffb454; --lipid:#ec7fa0; --protein:#a892ea;
+  --ok:#6fdca6; --warn:#ff7b6b;
+  --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.5}
+.app{height:100%;display:grid;grid-template-columns:minmax(0,1fr) 372px}
+.stage{position:relative;min-width:0;min-height:0;overflow:hidden;
+  background:radial-gradient(120% 90% at 50% 40%,var(--stage-a),var(--stage-b) 75%)}
+#c{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:grab}
+#c:active{cursor:grabbing}
+#labels{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.lab{position:absolute;left:0;top:0;white-space:nowrap;font-size:11.5px;font-weight:500;color:var(--ink);
+  background:rgba(6,17,25,.72);border:1px solid var(--line);border-radius:3px;padding:1px 6px;will-change:transform}
+.lab::before{content:"";position:absolute;left:-9px;top:50%;width:8px;height:1px;background:var(--muted)}
+.hud{position:absolute;left:max(16px,env(safe-area-inset-left,0px));top:14px;display:flex;flex-direction:column;gap:6px;pointer-events:none}
+.state{font-size:22px;font-weight:600;letter-spacing:-.01em}
+.sub{font-family:var(--mono);font-size:12px;color:var(--muted)}
+.hint{position:absolute;left:max(16px,env(safe-area-inset-left,0px));bottom:12px;font-size:12px;color:var(--muted);pointer-events:none}
+.nogl{position:absolute;inset:0;display:grid;place-items:center;padding:24px;text-align:center;color:var(--muted)}
+
+.panel{background:var(--panel);border-left:1px solid var(--line);overflow:auto;min-width:0;
+  padding-block:20px;padding-left:max(18px,env(safe-area-inset-left,0px));padding-right:max(18px,env(safe-area-inset-right,0px));
+  display:flex;flex-direction:column;gap:18px}
+h1{font-size:20px;font-weight:600;margin:0;letter-spacing:-.01em;text-wrap:balance}
+.lede{margin:4px 0 0;color:var(--muted);font-size:13px}
+.grp{display:flex;flex-direction:column;gap:8px}
+.cap{font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);font-weight:500}
+.seg{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.seg button{border:0;background:transparent;color:var(--muted);font:500 13px var(--sans);padding:8px 6px;cursor:pointer}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button[aria-pressed="true"]{background:var(--raise);color:var(--ink);box-shadow:inset 0 -2px 0 var(--water)}
+button:focus-visible,input:focus-visible{outline:2px solid var(--water);outline-offset:2px}
+.row{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.big{font-family:var(--mono);font-size:20px;font-weight:500;color:var(--solute);font-variant-numeric:tabular-nums}
+.unit{font-size:12px;color:var(--muted)}
+input[type=range]{width:100%;accent-color:var(--solute);margin:0}
+.ticks{display:flex;justify-content:space-between;font-family:var(--mono);font-size:10.5px;color:var(--muted)}
+.btns{display:flex;flex-wrap:wrap;gap:6px}
+.btn{border:1px solid var(--line);background:var(--raise);color:var(--ink);font:500 12.5px var(--sans);padding:6px 10px;border-radius:6px;cursor:pointer}
+.btn:hover{border-color:var(--muted)}
+.btn[aria-pressed="true"]{border-color:var(--water);color:var(--water)}
+.data{display:grid;grid-template-columns:1fr auto auto;column-gap:14px;row-gap:5px;font-variant-numeric:tabular-nums}
+.data dt{color:var(--muted);margin:0}
+.data dd{margin:0;font-family:var(--mono);text-align:right}
+.meter{position:relative;height:8px;background:var(--raise);border-radius:4px;overflow:hidden}
+.meter i{position:absolute;top:0;bottom:0;left:50%;width:0;background:var(--water)}
+.meter::after{content:"";position:absolute;left:50%;top:0;bottom:0;width:1px;background:var(--muted)}
+.mlab{display:flex;justify-content:space-between;font-size:11px;color:var(--muted)}
+.explain{margin:0;font-size:13.5px;max-width:62ch}
+.explain b{color:var(--ink);font-weight:600}
+.legend{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;font-size:12.5px}
+.legend li{display:flex;align-items:center;gap:8px;min-width:0}
+.dot{flex:none;width:11px;height:11px;border-radius:50%}
+.note{font-size:12px;color:var(--muted);margin:0}
+@media (max-width:860px){
+  html,body{height:auto}
+  .app{display:block;height:auto}
+  .stage{height:62vh;height:62svh;min-height:340px}
+  .panel{border-left:0;border-top:1px solid var(--line);overflow:visible}
+}
+</style>
+
+<div class="app">
+  <div class="stage" id="stage">
+    <canvas id="c" aria-label="Skenë 3D e osmozës në qelizë"></canvas>
+    <div id="labels"></div>
+    <div class="hud">
+      <div class="state" id="stateName">Normale</div>
+      <div class="sub" id="hudSub"></div>
+    </div>
+    <div class="hint">Tërhiq për ta rrotulluar · rrota ose dy gishta për zmadhim</div>
+    <div class="nogl" id="nogl" hidden>Ky shfletues nuk e mbështet WebGL-in, prandaj skena 3D nuk mund të vizatohet.</div>
+  </div>
+
+  <aside class="panel">
+    <div>
+      <h1>Osmoza 3D</h1>
+      <p class="lede">Uji kalon përmes membranës gjysmëpërshkuese drejt anës ku ka më shumë lëndë të tretur. Ndrysho tretësirën jashtë dhe shiko si reagon qeliza.</p>
+    </div>
+
+    <div class="grp">
+      <div class="cap">Pamja</div>
+      <div class="seg" id="segView">
+        <button type="button" id="vCell" data-v="cell" aria-pressed="true">Qeliza e plotë</button>
+        <button type="button" id="vClose" data-v="close" aria-pressed="false">Membrana nga afër</button>
+      </div>
+    </div>
+
+    <div class="grp">
+      <div class="cap">Lloji i qelizës</div>
+      <div class="seg" id="segType">
+        <button type="button" id="tAnimal" data-t="animal" aria-pressed="true">Shtazore</button>
+        <button type="button" id="tPlant" data-t="plant" aria-pressed="false">Bimore</button>
+      </div>
+    </div>
+
+    <div class="grp">
+      <div class="row"><label class="cap" for="ce">Tretësira jashtë qelizës</label>
+        <span><span class="big" id="ceVal">300</span> <span class="unit">mOsm/L</span></span></div>
+      <input type="range" id="ce" min="50" max="650" step="10" value="300">
+      <div class="ticks"><span>50</span><span>hipotonike</span><span>300</span><span>hipertonike</span><span>650</span></div>
+      <div class="btns">
+        <button type="button" class="btn" id="pHypo" data-ce="100">Hipotonike</button>
+        <button type="button" class="btn" id="pIso" data-ce="300">Izotonike</button>
+        <button type="button" class="btn" id="pHyper" data-ce="600">Hipertonike</button>
+      </div>
+    </div>
+
+    <div class="grp">
+      <div class="cap">Matjet</div>
+      <dl class="data">
+        <dt>Jashtë</dt><dd id="dCe">300 mOsm/L</dd><dd id="dPe">π 0,74 MPa</dd>
+        <dt>Brenda</dt><dd id="dCi">300 mOsm/L</dd><dd id="dPi">π 0,74 MPa</dd>
+        <dt>Vëllimi i qelizës</dt><dd id="dV">100 %</dd><dd></dd>
+        <dt id="dTl">Presioni i turgorit</dt><dd id="dT">0,00 MPa</dd><dd></dd>
+      </dl>
+      <div class="meter" aria-hidden="true"><i id="mFill"></i></div>
+      <div class="mlab"><span>ujë del</span><span id="mTxt">ekuilibër</span><span>ujë hyn</span></div>
+    </div>
+
+    <p class="explain" id="explain"></p>
+
+    <div class="btns">
+      <button type="button" class="btn" id="bPause" aria-pressed="false">Pauzë</button>
+      <button type="button" class="btn" id="bLabels" aria-pressed="true">Etiketat</button>
+      <button type="button" class="btn" id="bReset">Qelizë e re</button>
+    </div>
+
+    <div class="grp">
+      <div class="cap">Legjenda</div>
+      <ul class="legend">
+        <li><span class="dot" style="background:var(--water)"></span>Ujë (pamja e qelizës)</li>
+        <li><span class="dot" style="background:#ff5a5a;box-shadow:5px 3px 0 -2px #fff,-5px 3px 0 -2px #fff"></span>H₂O (nga afër)</li>
+        <li><span class="dot" style="background:var(--solute)"></span>Lëndë e tretur</li>
+        <li><span class="dot" style="background:var(--lipid)"></span>Fosfolipide</li>
+        <li><span class="dot" style="background:var(--protein)"></span>Akuaporina</li>
+        <li><span class="dot" style="background:#e9d05a"></span>Kolesterol</li>
+      </ul>
+      <p class="note">Molekulat janë zmadhuar shumë dhe nuk janë në shkallë. Presioni osmotik llogaritet me ligjin e van 't Hoff-it, π = C·R·T, në 25 °C. Brenda akuaporinës molekulat kalojnë një nga një dhe kthehen në mes të kanalit (filtri NPA), gjë që ndalon kalimin e protoneve.</p>
+    </div>
+  </aside>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function(){
+"use strict";
+const $=id=>document.getElementById(id);
+const canvas=$('c'), stage=$('stage'), labelsEl=$('labels');
+let renderer;
+try{ renderer=new THREE.WebGLRenderer({canvas:canvas,antialias:true,alpha:true}); }
+catch(e){ $('nogl').hidden=false; return; }
+renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
+const scene=new THREE.Scene();
+const camera=new THREE.PerspectiveCamera(42,1,0.1,300);
+scene.add(new THREE.HemisphereLight(0xd6f1ff,0x0a1a22,0.95));
+const dl=new THREE.DirectionalLight(0xffffff,0.85); dl.position.set(4,7,6); scene.add(dl);
+const dl2=new THREE.DirectionalLight(0x66ccff,0.35); dl2.position.set(-6,-3,-4); scene.add(dl2);
+
+/* ---------- modeli ---------- */
+const S={type:'animal',view:'cell',Ce:300,V:1,lysed:false,burst:0,paused:false,labels:true,inN:0,outN:0};
+const R0=2, ROUT=3.6, VTOT=4/3*Math.PI*ROUT*ROUT*ROUT, RHO_S=1.37, LYSE_V=1.7;
+const SHAPE={animal:{p:2,a:[1,1,1]},plant:{p:6,a:[1.17,0.9,0.9]}};
+let sh=SHAPE.animal, VIN=4/3*Math.PI*R0*R0*R0, sCur=1, crenCur=0;
+let seed=7; const rnd=()=>{seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};
+function shapeR(x,y,z){
+  if(sh.p===2) return 1;
+  const p=sh.p,a=sh.a;
+  return Math.pow(Math.pow(Math.abs(x/a[0]),p)+Math.pow(Math.abs(y/a[1]),p)+Math.pow(Math.abs(z/a[2]),p),-1/p);
+}
+const bump=(x,y,z)=>Math.pow(Math.abs(Math.sin(x*6+1.3)*Math.sin(y*6+0.7)*Math.sin(z*6+2.1)),0.5);
+const Ci=()=>300/S.V;
+const turgor=()=>S.type==='plant'?2600*Math.max(0,S.V-1):0;
+const drive=()=>S.lysed?0:Ci()-S.Ce-turgor();
+function stepModel(dt){
+  if(S.lysed){ S.burst=Math.min(1,S.burst+dt/1.6); return; }
+  S.V+=0.3*dt*drive()/300;
+  S.V=Math.max(0.3,S.V);
+  if(S.type==='animal'&&S.V>=LYSE_V){ S.V=LYSE_V; S.lysed=true; }
+}
+
+/* ---------- shaderat e mbeshtjelljes ---------- */
+const UG={uScale:{value:600}};
+const GL_PLACE=`
+uniform float uR,uCren,uTime,uBurst;
+float bump(vec3 d){return pow(abs(sin(d.x*6.0+1.3)*sin(d.y*6.0+0.7)*sin(d.z*6.0+2.1)),0.5);}
+vec3 place(vec3 p){vec3 d=normalize(p);
+  float k=1.0+uCren*(0.22*bump(d)-0.12)+0.008*sin(uTime*1.7+d.x*5.0+d.y*4.0)+uBurst*0.45;
+  return p*uR*k;}`;
+function shellMat(U,col,rim,alpha,fib){
+  return new THREE.ShaderMaterial({
+    uniforms:Object.assign({uCol:{value:new THREE.Color(col)},uRim:{value:new THREE.Color(rim)},uAlpha:{value:alpha},uFib:{value:fib}},U),
+    vertexShader:GL_PLACE+`
+varying vec3 vN;varying vec3 vV;varying vec3 vD;varying vec2 vUv;
+void main(){vec3 p=place(position);vec4 mv=modelViewMatrix*vec4(p,1.0);
+  vN=normalize(normalMatrix*normal);vV=normalize(-mv.xyz);vD=normalize(position);vUv=uv;
+  gl_Position=projectionMatrix*mv;}`,
+    fragmentShader:`
+uniform vec3 uCol;uniform vec3 uRim;uniform float uAlpha,uFib,uBurst;
+varying vec3 vN;varying vec3 vV;varying vec3 vD;varying vec2 vUv;
+void main(){float f=1.0-abs(dot(normalize(vN),normalize(vV)));
+  float a=uAlpha+0.6*pow(f,2.2);vec3 c=mix(uCol,uRim,pow(f,1.5));
+  if(uFib>0.5){float g=max(smoothstep(0.86,1.0,abs(sin(vUv.x*150.0+vUv.y*90.0))),smoothstep(0.86,1.0,abs(sin(vUv.x*150.0-vUv.y*90.0))));a+=g*0.2;c+=g*0.15;}
+  if(uBurst>0.0){float n=fract(sin(dot(floor(vD*7.0),vec3(12.9898,78.233,37.719)))*43758.5453);if(n<uBurst*1.3)discard;a*=1.0-uBurst*0.5;}
+  gl_FragColor=vec4(c,clamp(a,0.0,1.0));}`,
+    transparent:true,side:THREE.DoubleSide,depthWrite:false});
+}
+function shapedSphere(){
+  const g=new THREE.SphereGeometry(1,96,64),P=g.attributes.position,N=g.attributes.normal,p=sh.p,a=sh.a;
+  for(let i=0;i<P.count;i++){
+    const x=P.getX(i),y=P.getY(i),z=P.getZ(i),r=shapeR(x,y,z);
+    P.setXYZ(i,x*r,y*r,z*r);
+    let nx=Math.sign(x)*Math.pow(Math.abs(x*r/a[0]),p-1)/a[0],ny=Math.sign(y)*Math.pow(Math.abs(y*r/a[1]),p-1)/a[1],nz=Math.sign(z)*Math.pow(Math.abs(z*r/a[2]),p-1)/a[2];
+    const l=Math.hypot(nx,ny,nz)||1; N.setXYZ(i,nx/l,ny/l,nz/l);
+  }
+  return g;
+}
+function randDir(){const u=rnd()*2-1,t=rnd()*6.2832,s=Math.sqrt(1-u*u);return [s*Math.cos(t),u,s*Math.sin(t)];}
+
+/* ---------- pamja e qelizes ---------- */
+const cellG=new THREE.Group(); scene.add(cellG);
+const UM={uR:{value:R0},uCren:{value:0},uTime:{value:0},uBurst:{value:0}};
+const UW={uR:{value:R0*1.04},uCren:{value:0},uTime:{value:0},uBurst:{value:0}};
+let orgs=[],labels=[],vacuole=null,aqp=null,aqpDirs=[],ribo=null;
+const std=(c,o)=>new THREE.MeshStandardMaterial(Object.assign({color:c,roughness:0.55,metalness:0.05},o||{}));
+function inCell(lo,hi){const d=randDir(),u=lo+rnd()*(hi-lo),r=R0*shapeR(d[0],d[1],d[2])*u;return new THREE.Vector3(d[0]*r,d[1]*r,d[2]*r);}
+function addOrg(obj,pos,label){obj.position.copy(pos);cellG.add(obj);orgs.push({o:obj,b:pos.clone()});if(label)labels.push({view:'cell',t:label,o:obj});return obj;}
+function mito(){
+  const g=new THREE.Group();
+  const b=new THREE.Mesh(new THREE.SphereGeometry(1,20,14),std(0xe9744c)); b.scale.set(0.3,0.135,0.135); g.add(b);
+  for(let i=-2;i<=2;i++){const t=new THREE.Mesh(new THREE.TorusGeometry(0.128*Math.sqrt(1-Math.pow(i*0.2,2)*1.6),0.014,6,18),std(0x8f3a22));t.rotation.y=Math.PI/2;t.position.x=i*0.1;g.add(t);}
+  g.rotation.set(rnd()*6,rnd()*6,rnd()*6); return g;
+}
+function buildCell(){
+  while(cellG.children.length)cellG.remove(cellG.children[0]);
+  labelsEl.querySelectorAll('.lab[data-v="cell"]').forEach(n=>n.remove());
+  labels=labels.filter(l=>l.view!=='cell'); orgs=[]; vacuole=null; seed=11;
+  const plant=S.type==='plant', geo=shapedSphere();
+  const mem=new THREE.Mesh(geo,shellMat(UM,plant?0xd98aa8:0xe07d9f,0xffd3e2,0.07,0)); mem.renderOrder=3; mem.frustumCulled=false; cellG.add(mem);
+  labels.push({view:'cell',t:'Membrana qelizore',f:v=>{const d=[-0.5,0.86,0.1],r=R0*sCur*shapeR(d[0],d[1],d[2]);v.set(d[0]*r,d[1]*r,d[2]*r);}});
+  // kokat e fosfolipideve si pika mbi membrane
+  const n=3200,lp=new Float32Array(n*3);
+  for(let i=0;i<n;i++){const d=randDir(),r=shapeR(d[0],d[1],d[2]);lp[i*3]=d[0]*r;lp[i*3+1]=d[1]*r;lp[i*3+2]=d[2]*r;}
+  const lg=new THREE.BufferGeometry(); lg.setAttribute('position',new THREE.BufferAttribute(lp,3));
+  const lpts=new THREE.Points(lg,new THREE.ShaderMaterial({uniforms:Object.assign({},UM,UG),transparent:true,depthWrite:false,
+    vertexShader:GL_PLACE+`uniform float uScale;void main(){vec3 d=normalize(position);vec3 p=place(position);
+      p*=1.0+uBurst*(0.2+fract(sin(dot(d,vec3(12.9,78.2,37.7)))*43758.5)*1.1);
+      vec4 mv=modelViewMatrix*vec4(p,1.0);gl_PointSize=0.05*uScale/-mv.z;gl_Position=projectionMatrix*mv;}`,
+    fragmentShader:`uniform float uBurst;void main(){vec2 c=gl_PointCoord-0.5;float r=length(c);if(r>0.5)discard;
+      gl_FragColor=vec4(0.93,0.5,0.63,(0.75-uBurst*0.6)*smoothstep(0.5,0.3,r));}`}));
+  lpts.frustumCulled=false; lpts.renderOrder=4; cellG.add(lpts);
+  // akuaporinat ne membrane
+  aqpDirs=[]; for(let i=0;i<70;i++)aqpDirs.push(randDir());
+  aqp=new THREE.InstancedMesh(new THREE.CylinderGeometry(0.075,0.075,0.17,10,1,true),std(0xa892ea,{side:THREE.DoubleSide,emissive:0x2a1f5a}),70);
+  aqp.frustumCulled=false; cellG.add(aqp);
+  labels.push({view:'cell',t:'Akuaporinë',f:v=>{const d=aqpDirs[0],r=R0*sCur*shapeR(d[0],d[1],d[2]);v.set(d[0]*r,d[1]*r,d[2]*r);}});
+
+  if(!plant){
+    const nucP=new THREE.Vector3(0.25,0.1,-0.1);
+    const nuc=new THREE.Mesh(new THREE.SphereGeometry(0.62,36,26),std(0x5468d4,{roughness:0.7}));
+    const pp=new Float32Array(160*3);for(let i=0;i<160;i++){const d=randDir();pp[i*3]=d[0]*0.625;pp[i*3+1]=d[1]*0.625;pp[i*3+2]=d[2]*0.625;}
+    const pg=new THREE.BufferGeometry();pg.setAttribute('position',new THREE.BufferAttribute(pp,3));
+    nuc.add(new THREE.Points(pg,new THREE.PointsMaterial({color:0x1c2466,size:0.05})));
+    addOrg(nuc,nucP,'Bërthama');
+    const er=new THREE.Group(),rp=[];
+    for(let j=0;j<5;j++){
+      const pts=[],rr=0.76+0.1*j;
+      for(let k=0;k<16;k++){const a=k/16*6.2832;pts.push(new THREE.Vector3(Math.cos(a)*rr,Math.sin(a*3+j*1.3)*0.16+(j-2)*0.17,Math.sin(a)*rr*0.92));}
+      const cv=new THREE.CatmullRomCurve3(pts,true);
+      er.add(new THREE.Mesh(new THREE.TubeGeometry(cv,110,0.042,6,true),std(0x9486dd)));
+      cv.getPoints(90).forEach(p=>rp.push(p.x+(rnd()-.5)*0.11,p.y+(rnd()-.5)*0.11,p.z+(rnd()-.5)*0.11));
+    }
+    const rg=new THREE.BufferGeometry();rg.setAttribute('position',new THREE.BufferAttribute(new Float32Array(rp),3));
+    er.add(new THREE.Points(rg,new THREE.PointsMaterial({color:0xffdca8,size:0.035})));
+    addOrg(er,nucP,null);
+    labels.push({view:'cell',t:'Rrjeti endoplazmatik',f:v=>{v.set(0.25*sCur+1.05,0.1*sCur+0.38,-0.1*sCur+0.3);}});
+    for(let i=0;i<8;i++){let p;do{p=inCell(0.55,0.8);}while(p.distanceTo(nucP)<1.25);addOrg(mito(),p,i===0?'Mitokondri':null);}
+    const gol=new THREE.Group();
+    for(let i=0;i<5;i++){const t=new THREE.Mesh(new THREE.TorusGeometry(0.32+0.085*i,0.028,8,28,1.7),std(0xe8c24a));t.scale.z=5.5;t.rotation.z=-0.85;gol.add(t);}
+    for(let i=0;i<6;i++){const v=new THREE.Mesh(new THREE.SphereGeometry(0.05,10,8),std(0xf2d77c));v.position.set(0.3+rnd()*0.5,0.3+rnd()*0.5,(rnd()-.5)*0.4);gol.add(v);}
+    gol.rotation.set(0.4,0.9,0.2); addOrg(gol,new THREE.Vector3(-1.05,-0.6,0.55),'Aparati i Golxhit');
+    for(let i=0;i<7;i++){let p;do{p=inCell(0.5,0.8);}while(p.distanceTo(nucP)<1.2);addOrg(new THREE.Mesh(new THREE.SphereGeometry(0.1,14,10),std(0x58cfa6)),p,i===0?'Lizozom':null);}
+    const cen=new THREE.Group(),cm=std(0xb8c4cc),c1=new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.05,0.2,9),cm),c2=c1.clone();
+    c2.rotation.z=Math.PI/2;c2.position.set(0.14,0.02,0);cen.add(c1,c2);addOrg(cen,new THREE.Vector3(0.95,-0.8,0.65),'Centriole');
+  }else{
+    const wall=new THREE.Mesh(geo,shellMat(UW,0x6fae5a,0xcdeeb0,0.06,1));wall.renderOrder=5;wall.frustumCulled=false;cellG.add(wall);
+    labels.push({view:'cell',t:'Muri qelizor',f:v=>{const d=[0.62,0.74,0.25],r=R0*1.04*shapeR(d[0],d[1],d[2]);v.set(d[0]*r,d[1]*r,d[2]*r);}});
+    vacuole=new THREE.Mesh(new THREE.SphereGeometry(1,40,28),new THREE.MeshStandardMaterial({color:0x6fc4ee,transparent:true,opacity:0.3,roughness:0.2,depthWrite:false}));
+    vacuole.renderOrder=2;cellG.add(vacuole);labels.push({view:'cell',t:'Vakuola qendrore',o:vacuole});
+    const nd=[0.75,0.5,0.45],nl=Math.hypot(nd[0],nd[1],nd[2]),nr=R0*shapeR(nd[0]/nl,nd[1]/nl,nd[2]/nl)*0.74;
+    addOrg(new THREE.Mesh(new THREE.SphereGeometry(0.42,30,22),std(0x5468d4,{roughness:0.7})),new THREE.Vector3(nd[0]/nl*nr,nd[1]/nl*nr,nd[2]/nl*nr),'Bërthama');
+    for(let i=0;i<18;i++){const c=new THREE.Mesh(new THREE.SphereGeometry(1,16,12),std(0x4fae4a,{emissive:0x0c2a0c}));c.scale.set(0.26,0.19,0.1);
+      const p=inCell(0.86,0.9);addOrg(c,p,i===0?'Kloroplast':null);c.lookAt(0,0,0);}
+    for(let i=0;i<5;i++)addOrg(mito(),inCell(0.84,0.9),i===0?'Mitokondri':null);
+  }
+  const rb=new Float32Array(320*3);for(let i=0;i<320;i++){const p=plant?inCell(0.8,0.93):inCell(0.35,0.9);rb[i*3]=p.x;rb[i*3+1]=p.y;rb[i*3+2]=p.z;}
+  const rbg=new THREE.BufferGeometry();rbg.setAttribute('position',new THREE.BufferAttribute(rb,3));
+  ribo=new THREE.Points(rbg,new THREE.PointsMaterial({color:0xf3c98f,size:0.03}));cellG.add(ribo);
+  cellG.add(waterPts,solMesh);
+  makeLabelEls();
+}
+
+/* grimcat e ujit dhe te lendes se tretur (pamja e qelizes) */
+const NW=1500,MAXS=760;
+const wPos=new Float32Array(NW*3),wVel=new Float32Array(NW*3),wSide=new Uint8Array(NW),wFlash=new Float32Array(NW);
+const sPos=new Float32Array(MAXS*3),sVel=new Float32Array(MAXS*3),sSide=new Uint8Array(MAXS);
+let wIn=0,nSin=0,nSout=0;
+const wGeo=new THREE.BufferGeometry();
+wGeo.setAttribute('position',new THREE.BufferAttribute(wPos,3));wGeo.setAttribute('aFlash',new THREE.BufferAttribute(wFlash,1));
+const waterPts=new THREE.Points(wGeo,new THREE.ShaderMaterial({uniforms:UG,transparent:true,depthWrite:false,
+  vertexShader:`uniform float uScale;attribute float aFlash;varying float vF;void main(){vF=aFlash;vec4 mv=modelViewMatrix*vec4(position,1.0);
+    gl_PointSize=(0.075+0.09*aFlash)*uScale/-mv.z;gl_Position=projectionMatrix*mv;}`,
+  fragmentShader:`varying float vF;void main(){vec2 c=gl_PointCoord-0.5;float r=length(c);if(r>0.5)discard;
+    vec3 col=mix(vec3(0.36,0.78,0.96),vec3(1.0),vF*0.8);gl_FragColor=vec4(col,(0.8+0.2*vF)*smoothstep(0.5,0.28,r));}`}));
+waterPts.frustumCulled=false;waterPts.renderOrder=6;
+const solMesh=new THREE.InstancedMesh(new THREE.SphereGeometry(0.068,10,8),std(0xffb454,{emissive:0x6b3f08}),MAXS);
+solMesh.frustumCulled=false;
+function memR(x,y,z,r){return R0*sCur*shapeR(x/r,y/r,z/r)*(1-0.12*crenCur);}
+function randPoint(inside,out,o){
+  for(let k=0;k<400;k++){
+    const x=(Math.random()*2-1)*ROUT,y=(Math.random()*2-1)*ROUT,z=(Math.random()*2-1)*ROUT,r=Math.hypot(x,y,z);
+    if(r>ROUT*0.97||r<0.05)continue;
+    const f=r/memR(x,y,z,r);
+    if(inside?f<0.94:f>1.08){out[o]=x;out[o+1]=y;out[o+2]=z;return;}
+  }
+  out[o]=inside?0:ROUT*0.9;out[o+1]=0;out[o+2]=0;
+}
+function initParticles(){
+  sCur=1;crenCur=0;
+  if(sh.p===2)VIN=4/3*Math.PI*R0*R0*R0;
+  else{let c=0;const N=30000;for(let i=0;i<N;i++){const x=(Math.random()*2-1)*ROUT,y=(Math.random()*2-1)*ROUT,z=(Math.random()*2-1)*ROUT,r=Math.hypot(x,y,z)||1;if(r<R0*shapeR(x/r,y/r,z/r))c++;}VIN=c/N*8*ROUT*ROUT*ROUT;}
+  wIn=0;const tIn=Math.round(NW*VIN/VTOT);
+  for(let i=0;i<NW;i++){const ins=i<tIn;randPoint(ins,wPos,i*3);wSide[i]=ins?1:0;if(ins)wIn++;wFlash[i]=0;wVel[i*3]=wVel[i*3+1]=wVel[i*3+2]=0;}
+  nSin=Math.round(RHO_S*VIN);nSout=0;
+  for(let i=0;i<nSin;i++){randPoint(true,sPos,i*3);sSide[i]=1;}
+  syncSolutes();
+}
+function syncSolutes(){
+  const target=Math.min(MAXS-nSin,Math.round(RHO_S*(S.Ce/300)*(VTOT-VIN)));
+  while(nSout<target){const i=nSin+nSout;randPoint(false,sPos,i*3);sSide[i]=0;sVel[i*3]=sVel[i*3+1]=sVel[i*3+2]=0;nSout++;}
+  if(nSout>target)nSout=target;
+}
+function moveSet(pos,vel,side,n,dt,water){
+  const kick=water?7:3.5,vmax=water?1.7:0.85,damp=Math.max(0,1-1.4*dt);
+  const tIn=Math.round(NW*VIN*S.V/VTOT);
+  for(let i=0;i<n;i++){
+    const j=i*3;let ox=pos[j],oy=pos[j+1],oz=pos[j+2];
+    // membrana qe leviz e shtyn grimcen ne anen e vet
+    if(!S.lysed){const r0=Math.hypot(ox,oy,oz)||1e-3,m0=memR(ox,oy,oz,r0),f0=r0/m0;
+      if(side[i]&&f0>0.985){const k=0.97*m0/r0;ox*=k;oy*=k;oz*=k;}
+      else if(!side[i]&&f0<1.015){const k=1.03*m0/r0;ox*=k;oy*=k;oz*=k;}}
+    let vx=(vel[j]+(Math.random()-.5)*kick*dt)*damp,vy=(vel[j+1]+(Math.random()-.5)*kick*dt)*damp,vz=(vel[j+2]+(Math.random()-.5)*kick*dt)*damp;
+    const sp=Math.hypot(vx,vy,vz);if(sp>vmax){const k=vmax/sp;vx*=k;vy*=k;vz*=k;}
+    let x=ox+vx*dt,y=oy+vy*dt,z=oz+vz*dt;const r=Math.hypot(x,y,z)||1e-3;
+    if(r>ROUT){x=ox;y=oy;z=oz;vx=-vx;vy=-vy;vz=-vz;}
+    else{
+      const ins=r<memR(x,y,z,r)?1:0;
+      if(ins!==side[i]){
+        if(S.lysed){side[i]=ins;}
+        else{
+          let ok=false;
+          if(water){const want=ins?(wIn<tIn-2?0.9:(wIn>tIn+2?0.03:0.25)):(wIn>tIn+2?0.9:(wIn<tIn-2?0.03:0.25));ok=Math.random()<want;}
+          if(ok){side[i]=ins;wIn+=ins?1:-1;wFlash[i]=1;}
+          else{x=ox;y=oy;z=oz;vx=-vx;vy=-vy;vz=-vz;}
+        }
+      }
+    }
+    pos[j]=x;pos[j+1]=y;pos[j+2]=z;vel[j]=vx;vel[j+1]=vy;vel[j+2]=vz;
+  }
+}
+function stepCell(dt){
+  moveSet(wPos,wVel,wSide,NW,dt,true);
+  moveSet(sPos,sVel,sSide,nSin+nSout,dt,false);
+  for(let i=0;i<NW;i++)if(wFlash[i]>0)wFlash[i]=Math.max(0,wFlash[i]-dt*1.4);
+}
+const dummy=new THREE.Object3D(),UP=new THREE.Vector3(0,1,0),tv=new THREE.Vector3(),tq=new THREE.Quaternion();
+function drawCell(){
+  UM.uR.value=R0*sCur;UM.uCren.value=crenCur;UM.uBurst.value=S.burst;
+  const sp=sCur*(1+S.burst*0.55);
+  for(const g of orgs)g.o.position.copy(g.b).multiplyScalar(sp);
+  if(ribo)ribo.scale.setScalar(sp);
+  if(vacuole){const k=Math.cbrt(Math.max(0.03,(S.V-0.4)/0.6))*R0*0.72;vacuole.scale.set(1.17*k,0.9*k,0.9*k);}
+  for(let i=0;i<aqpDirs.length;i++){const d=aqpDirs[i],k=R0*sCur*shapeR(d[0],d[1],d[2])*(1+crenCur*(0.22*bump(d[0],d[1],d[2])-0.12)+S.burst*0.45);
+    dummy.position.set(d[0]*k,d[1]*k,d[2]*k);tv.set(d[0],d[1],d[2]);dummy.quaternion.setFromUnitVectors(UP,tv);dummy.scale.setScalar(1-S.burst);dummy.updateMatrix();aqp.setMatrixAt(i,dummy.matrix);}
+  aqp.instanceMatrix.needsUpdate=true;
+  dummy.quaternion.identity();dummy.scale.setScalar(1);
+  const n=nSin+nSout;for(let i=0;i<n;i++){dummy.position.set(sPos[i*3],sPos[i*3+1],sPos[i*3+2]);dummy.updateMatrix();solMesh.setMatrixAt(i,dummy.matrix);}
+  solMesh.count=n;solMesh.instanceMatrix.needsUpdate=true;
+  wGeo.attributes.position.needsUpdate=true;wGeo.attributes.aFlash.needsUpdate=true;
+}
+
+/* ---------- pamja nga afer: shtresa e dyfishte + akuaporinat ---------- */
+const closeG=new THREE.Group();closeG.visible=false;scene.add(closeG);
+const HX=7,HZ=4,HY=6,MEM=1.95;
+const tetra=[[-4.4,0.9],[0,-0.8],[4.4,0.7]],pores=[];
+let heads,chol,glyco,fibG,molO,molH1,molH2,cSol,cShell;
+const lip=[],mols=[],csol=[];
+(function buildClose(){
+  seed=23;
+  const box=new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(HX*2,HY*2,HZ*2)),new THREE.LineBasicMaterial({color:0x2a4a5a}));closeG.add(box);
+  // monomeret e akuaporines: profil ore rere i rrotulluar
+  const prof=[[0.46,-1.8],[0.5,-1.0],[0.5,1.0],[0.46,1.8],[0.3,1.8],[0.2,1.0],[0.15,0],[0.2,-1.0],[0.3,-1.8],[0.46,-1.8]].map(p=>new THREE.Vector2(p[0],p[1]));
+  const lg=new THREE.LatheGeometry(prof,22),lm=new THREE.MeshStandardMaterial({color:0xa892ea,transparent:true,opacity:0.5,side:THREE.DoubleSide,depthWrite:false,roughness:0.4});
+  const ring=new THREE.TorusGeometry(0.17,0.03,8,20),rm=std(0xfff1a8,{emissive:0x6a5a10});
+  tetra.forEach(t=>{[-0.5,0.5].forEach(dx=>{[-0.5,0.5].forEach(dz=>{
+    const m=new THREE.Mesh(lg,lm);m.position.set(t[0]+dx,0,t[1]+dz);m.renderOrder=3;closeG.add(m);
+    const r=new THREE.Mesh(ring,rm);r.rotation.x=Math.PI/2;r.position.copy(m.position);closeG.add(r);
+    pores.push({x:t[0]+dx,z:t[1]+dz,n:0,dir:0,age:9});});});});
+  // fosfolipidet
+  for(let leaf=0;leaf<2;leaf++){let row=0;for(let z=-HZ+0.1;z<=HZ-0.05;z+=0.42,row++)for(let x=-HX+0.12+(row%2?0.24:0);x<=HX-0.05;x+=0.48){
+    if(tetra.some(t=>Math.hypot(x-t[0],z-t[1])<1.2))continue;
+    lip.push({x:x+(rnd()-.5)*0.08,z:z+(rnd()-.5)*0.08,up:leaf===0,ph:rnd()*6.28});}}
+  const n=lip.length;
+  heads=new THREE.InstancedMesh(new THREE.SphereGeometry(0.2,10,8),std(0xec7fa0),n);
+  const ta=new THREE.CylinderGeometry(0.045,0.04,1.15,5);ta.translate(-0.085,-0.75,0);
+  const tb=new THREE.CylinderGeometry(0.045,0.04,1.15,5);tb.rotateZ(0.1);tb.translate(0.13,-0.74,0);
+  const tm=std(0xeadba6),tA=new THREE.InstancedMesh(ta,tm,n),tB=new THREE.InstancedMesh(tb,tm,n);
+  tA.instanceMatrix=heads.instanceMatrix;tB.instanceMatrix=heads.instanceMatrix;
+  [heads,tA,tB].forEach(m=>{m.frustumCulled=false;closeG.add(m);});
+  // kolesteroli (vetem qeliza shtazore)
+  chol=new THREE.InstancedMesh(new THREE.SphereGeometry(1,8,6),std(0xe9d05a),70);chol.frustumCulled=false;
+  for(let i=0;i<70;i++){const l=lip[Math.floor(rnd()*n)];dummy.position.set(l.x+0.24,(l.up?1:-1)*0.85,l.z+0.2);dummy.rotation.set(0,0,(rnd()-.5)*0.3);dummy.scale.set(0.09,0.34,0.09);dummy.updateMatrix();chol.setMatrixAt(i,dummy.matrix);}
+  closeG.add(chol);
+  // glikokaliksi
+  glyco=new THREE.InstancedMesh(new THREE.SphereGeometry(0.11,8,6),std(0x7fd08a),64);glyco.frustumCulled=false;dummy.rotation.set(0,0,0);dummy.scale.setScalar(1);
+  let gi=0;for(let c=0;c<8;c++){let x=-6+rnd()*12,z=-3.4+rnd()*6.8,y=1.85;for(let b=0;b<8;b++){dummy.position.set(x,y,z);dummy.updateMatrix();glyco.setMatrixAt(gi++,dummy.matrix);x+=(rnd()-.5)*0.28;z+=(rnd()-.5)*0.28;y+=0.19;}}
+  closeG.add(glyco);
+  // fibrat e celulozes (vetem qeliza bimore)
+  fibG=new THREE.Group();const fm=std(0x8fb56a,{roughness:0.8});
+  for(let i=0;i<16;i++){const f=new THREE.Mesh(new THREE.CylinderGeometry(0.1,0.1,HX*2.2,7),fm);f.rotation.z=Math.PI/2;f.rotation.y=(i%2?0.45:-0.45)+(rnd()-.5)*0.25;f.position.set(0,3.4+rnd()*1.3,-3.4+i*0.45);fibG.add(f);}
+  closeG.add(fibG);
+  // molekulat e ujit
+  const NM=300;
+  molO=new THREE.InstancedMesh(new THREE.SphereGeometry(0.14,12,9),std(0xff5a5a,{roughness:0.35}),NM);
+  const hg=new THREE.SphereGeometry(0.09,10,7),hm=std(0xf5f8fa,{roughness:0.35});
+  molH1=new THREE.InstancedMesh(hg,hm,NM);molH2=new THREE.InstancedMesh(hg,hm,NM);
+  [molO,molH1,molH2].forEach(m=>{m.frustumCulled=false;closeG.add(m);});
+  for(let i=0;i<NM;i++){const top=i<NM/2;mols.push({p:new THREE.Vector3((Math.random()*2-1)*HX,(top?1:-1)*(MEM+0.3+Math.random()*(HY-MEM-0.4)),(Math.random()*2-1)*HZ),
+    v:new THREE.Vector3(),q:new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.random()*6,Math.random()*6,Math.random()*6)),
+    ax:new THREE.Vector3(Math.random()-.5,Math.random()-.5,Math.random()-.5).normalize(),w:2+Math.random()*4,st:top?0:1,pore:-1,dir:0,cd:Math.random()});}
+  // lenda e tretur me shtresen e hidratimit
+  cSol=new THREE.InstancedMesh(new THREE.SphereGeometry(0.3,16,12),std(0xffb454,{emissive:0x5a3506}),60);
+  cShell=new THREE.InstancedMesh(new THREE.SphereGeometry(0.56,16,12),new THREE.MeshStandardMaterial({color:0x5cc8f5,transparent:true,opacity:0.16,depthWrite:false}),60);
+  cShell.instanceMatrix=cSol.instanceMatrix;cShell.renderOrder=2;
+  [cSol,cShell].forEach(m=>{m.frustumCulled=false;closeG.add(m);});
+  for(let i=0;i<60;i++){const top=i<30;csol.push({p:new THREE.Vector3((Math.random()*2-1)*(HX-0.6),(top?1:-1)*(MEM+0.7+Math.random()*(HY-MEM-1.2)),(Math.random()*2-1)*(HZ-0.6)),v:new THREE.Vector3(),sg:top?1:-1,s:0});}
+  labels.push({view:'close',t:'Lëngu jashtëqelizor',f:v=>v.set(-6.2,5.3,-3.6)},{view:'close',t:'Citoplazma',f:v=>v.set(-6.2,-5.3,-3.6)},
+    {view:'close',t:'Akuaporinë (tetramer)',f:v=>v.set(0.9,2.0,-0.8)},{view:'close',t:'Shtresa e dyfishtë fosfolipidike',f:v=>v.set(6.6,0,3.6)},
+    {view:'close',t:'Filtri NPA',f:v=>v.set(-3.9,0,1.4)},{view:'close',type:'plant',t:'Muri qelizor: fibra celuloze',f:v=>v.set(5.5,4.3,2.5)},
+    {view:'close',type:'animal',t:'Glikokaliks',f:v=>v.set(-2.2,3.2,2.6)});
+})();
+const hOff1=new THREE.Vector3(0.158,-0.122,0),hOff2=new THREE.Vector3(-0.158,-0.122,0);
+function stepClose(dt,time){
+  const d=THREE.MathUtils.clamp(drive()/350,-0.9,0.9),pIn=0.5*(1+d),pOut=0.5*(1-d);
+  for(const p of pores)p.age+=dt;
+  let nTop=0,nBot=0;
+  for(const m of mols){
+    if(m.st===2){
+      const pc=pores[m.pore];
+      m.p.y+=m.dir*2.3*dt;const k=Math.min(1,10*dt);m.p.x+=(pc.x-m.p.x)*k;m.p.z+=(pc.z-m.p.z)*k;
+      tv.set(0,m.p.y>0?-1:1,0);tq.setFromUnitVectors(UP,tv);m.q.slerp(tq,Math.min(1,7*dt));
+      if(m.dir*m.p.y>MEM+0.1){m.st=m.dir<0?1:0;pc.n--;if(pc.n<=0){pc.n=0;pc.dir=0;}
+        if(m.dir<0)S.inN++;else S.outN++;m.v.set((Math.random()-.5)*1.5,m.dir*1.6,(Math.random()-.5)*1.5);m.cd=1.3;}
+      continue;
+    }
+    const sg=m.st===0?1:-1;if(sg>0)nTop++;else nBot++;
+    m.cd-=dt;
+    m.v.x+=(Math.random()-.5)*10*dt;m.v.y+=(Math.random()-.5)*10*dt;m.v.z+=(Math.random()-.5)*10*dt;
+    let ya=m.p.y*sg,best=-1,bd=1e9;
+    if(ya<MEM+0.9){for(let i=0;i<pores.length;i++){const h=Math.hypot(m.p.x-pores[i].x,m.p.z-pores[i].z);if(h<bd){bd=h;best=i;}}
+      if(bd<1.0){m.v.x+=(pores[best].x-m.p.x)*3*dt;m.v.z+=(pores[best].z-m.p.z)*3*dt;}}
+    const sp=m.v.length();if(sp>2.4)m.v.multiplyScalar(2.4/sp);
+    m.p.addScaledVector(m.v,dt);
+    tq.setFromAxisAngle(m.ax,m.w*dt);m.q.multiply(tq);
+    if(Math.abs(m.p.x)>HX-0.15){m.p.x=Math.sign(m.p.x)*(HX-0.15);m.v.x*=-1;}
+    if(Math.abs(m.p.z)>HZ-0.15){m.p.z=Math.sign(m.p.z)*(HZ-0.15);m.v.z*=-1;}
+    ya=m.p.y*sg;
+    if(ya>HY-0.15){m.p.y=sg*(HY-0.15);m.v.y*=-1;}
+    else if(ya<MEM+0.15){
+      let entered=false;
+      if(m.cd<=0&&best>=0&&bd<0.42){
+        const pc=pores[best],dir=-sg;m.cd=0.5;
+        if((pc.n===0||(pc.dir===dir&&pc.age>0.32))&&Math.random()<(sg>0?pIn:pOut)){m.st=2;m.pore=best;m.dir=dir;pc.n++;pc.dir=dir;pc.age=0;entered=true;}
+      }
+      if(!entered){m.p.y=sg*(MEM+0.15);m.v.y=Math.abs(m.v.y)*sg;}
+    }
+  }
+  // mbaj dendesine e ujit te qendrueshme larg membranes
+  if(nTop<120||nBot<120){const from=nTop<120?1:0;for(const m of mols){if(m.st===from&&Math.abs(m.p.y)>HY-1.2){m.st=1-from;m.p.y=-m.p.y;m.v.y*=-1;break;}}}
+  const tTop=THREE.MathUtils.clamp(Math.round(S.Ce/24),1,30),tBot=THREE.MathUtils.clamp(Math.round((S.lysed?S.Ce:Ci())/24),1,30);
+  for(let i=0;i<60;i++){const c=csol[i],act=(i<30?i<tTop:i-30<tBot);
+    c.s+=((act?1:0)-c.s)*Math.min(1,5*dt);
+    c.v.x+=(Math.random()-.5)*3*dt;c.v.y+=(Math.random()-.5)*3*dt;c.v.z+=(Math.random()-.5)*3*dt;
+    const sp=c.v.length();if(sp>0.8)c.v.multiplyScalar(0.8/sp);c.p.addScaledVector(c.v,dt);
+    if(Math.abs(c.p.x)>HX-0.6){c.p.x=Math.sign(c.p.x)*(HX-0.6);c.v.x*=-1;}
+    if(Math.abs(c.p.z)>HZ-0.6){c.p.z=Math.sign(c.p.z)*(HZ-0.6);c.v.z*=-1;}
+    const ya=c.p.y*c.sg;if(ya>HY-0.6){c.p.y=c.sg*(HY-0.6);c.v.y*=-1;}else if(ya<MEM+0.65){c.p.y=c.sg*(MEM+0.65);c.v.y*=-1;}}
+}
+function drawClose(time){
+  dummy.scale.setScalar(1);
+  for(let i=0;i<lip.length;i++){const l=lip[i];
+    dummy.position.set(l.x+Math.sin(time*1.3+l.ph)*0.04,(l.up?1.55:-1.55)+Math.sin(time*1.9+l.ph*2)*0.05,l.z+Math.cos(time*1.1+l.ph)*0.04);
+    dummy.rotation.set(Math.sin(time+l.ph)*0.09,0,(l.up?0:Math.PI)+Math.cos(time*0.8+l.ph)*0.09);dummy.updateMatrix();heads.setMatrixAt(i,dummy.matrix);}
+  heads.instanceMatrix.needsUpdate=true;
+  for(let i=0;i<mols.length;i++){const m=mols[i];
+    dummy.position.copy(m.p);dummy.quaternion.copy(m.q);dummy.updateMatrix();molO.setMatrixAt(i,dummy.matrix);
+    tv.copy(hOff1).applyQuaternion(m.q).add(m.p);dummy.position.copy(tv);dummy.updateMatrix();molH1.setMatrixAt(i,dummy.matrix);
+    tv.copy(hOff2).applyQuaternion(m.q).add(m.p);dummy.position.copy(tv);dummy.updateMatrix();molH2.setMatrixAt(i,dummy.matrix);}
+  molO.instanceMatrix.needsUpdate=molH1.instanceMatrix.needsUpdate=molH2.instanceMatrix.needsUpdate=true;
+  dummy.quaternion.identity();
+  for(let i=0;i<60;i++){const c=csol[i];dummy.position.copy(c.p);dummy.scale.setScalar(Math.max(0.0001,c.s));dummy.updateMatrix();cSol.setMatrixAt(i,dummy.matrix);}
+  cSol.instanceMatrix.needsUpdate=true;dummy.scale.setScalar(1);
+}
+
+/* ---------- etiketat ---------- */
+function makeLabelEls(){
+  for(const l of labels){if(l.el)continue;const e=document.createElement('div');e.className='lab';e.dataset.v=l.view;e.textContent=l.t;labelsEl.appendChild(e);l.el=e;}
+}
+const lv=new THREE.Vector3();
+function drawLabels(w,h){
+  for(const l of labels){
+    const show=S.labels&&l.view===S.view&&(!l.type||l.type===S.type)&&!(S.lysed&&S.view==='cell');
+    if(!show){l.el.hidden=true;continue;}
+    if(l.o)l.o.getWorldPosition(lv);else l.f(lv);
+    lv.project(camera);
+    if(lv.z>1||Math.abs(lv.x)>1.05||Math.abs(lv.y)>1.05){l.el.hidden=true;continue;}
+    l.el.hidden=false;l.el.style.transform='translate('+((lv.x*0.5+0.5)*w+12).toFixed(1)+'px,'+((-lv.y*0.5+0.5)*h-9).toFixed(1)+'px)';
+  }
+}
+
+/* ---------- kamera ---------- */
+const cams={cell:{th:0.55,ph:1.2,r:10.5,min:4,max:24},close:{th:0.4,ph:1.28,r:19,min:5,max:40}};
+let auto=!window.matchMedia('(prefers-reduced-motion: reduce)').matches,W=1,H=1;
+function resize(){const b=stage.getBoundingClientRect();W=Math.max(1,b.width);H=Math.max(1,b.height);renderer.setSize(W,H,false);camera.aspect=W/H;camera.updateProjectionMatrix();
+  UG.uScale.value=H*renderer.getPixelRatio()/(2*Math.tan(camera.fov*Math.PI/360));}
+new ResizeObserver(resize).observe(stage);resize();
+function placeCam(dt){
+  const c=cams[S.view];if(auto)c.th+=dt*0.08;
+  const fit=camera.aspect<1?Math.pow(1/camera.aspect,0.75):1,r=c.r*fit;
+  camera.position.set(r*Math.sin(c.ph)*Math.sin(c.th),r*Math.cos(c.ph),r*Math.sin(c.ph)*Math.cos(c.th));camera.lookAt(0,0,0);
+}
+const ptr=new Map();let pinch=0;
+canvas.addEventListener('pointerdown',e=>{canvas.setPointerCapture(e.pointerId);ptr.set(e.pointerId,[e.clientX,e.clientY]);auto=false;pinch=0;});
+canvas.addEventListener('pointermove',e=>{
+  const p=ptr.get(e.pointerId);if(!p)return;const c=cams[S.view];
+  if(ptr.size===1){c.th-=(e.clientX-p[0])*0.006;c.ph=THREE.MathUtils.clamp(c.ph-(e.clientY-p[1])*0.006,0.15,2.99);}
+  p[0]=e.clientX;p[1]=e.clientY;
+  if(ptr.size===2){const a=[...ptr.values()],d=Math.hypot(a[0][0]-a[1][0],a[0][1]-a[1][1]);if(pinch)c.r=THREE.MathUtils.clamp(c.r*pinch/d,c.min,c.max);pinch=d;}
+});
+const up=e=>{ptr.delete(e.pointerId);pinch=0;};
+canvas.addEventListener('pointerup',up);canvas.addEventListener('pointercancel',up);
+canvas.addEventListener('wheel',e=>{e.preventDefault();const c=cams[S.view];c.r=THREE.MathUtils.clamp(c.r*Math.exp(e.deltaY*0.0012),c.min,c.max);auto=false;},{passive:false});
+
+/* ---------- nderfaqja ---------- */
+const fmt=(v,n)=>v.toFixed(n).replace('.',',');
+const TXT={
+ animal:{hypo:'Jashtë ka <b>më pak lëndë të tretur</b> se brenda (tretësirë hipotonike), pra potenciali i ujit është më i lartë jashtë. Uji hyn përmes akuaporinave dhe qeliza fryhet. Pa mur qelizor, në këtë model membrana çahet nën rreth 175 mOsm/L: <b>citolizë</b>.',
+  iso:'Përqendrimi është <b>i njëjtë në të dy anët</b> (izotonike). Molekulat e ujit vazhdojnë të kalojnë në të dy drejtimet, por me të njëjtin ritëm. Ky është ekuilibër dinamik dhe vëllimi nuk ndryshon.',
+  hyper:'Jashtë ka <b>më shumë lëndë të tretur</b> (hipertonike). Uji del nga qeliza, citoplazma përqendrohet dhe membrana rrudhet me gjemba: <b>krenacion</b>.',
+  lysed:'Membrana u ça. Përmbajtja e qelizës përzihet me tretësirën përreth dhe nuk ka më dy anë të ndara, prandaj osmoza ndalon. Shtyp «Qelizë e re» për të provuar përsëri.'},
+ plant:{hypo:'Uji hyn dhe <b>vakuola qendrore</b> fryhet, duke e shtypur membranën pas murit qelizor. Muri kundërvepron me presion turgori derisa rrjedha neto ndalet. Qeliza është <b>turgore</b>, gjendja normale e një bime të shëndetshme.',
+  iso:'Nuk ka rrjedhë neto uji. Membrana mezi e prek murin, turgori është zero dhe qeliza është <b>e fishkur</b>. Bima fillon të vyshket.',
+  hyper:'Uji del nga vakuola. Protoplasti tkurret dhe shkëputet nga muri qelizor: <b>plazmolizë</b>. Hapësira mes tyre mbushet me tretësirën e jashtme, sepse muri është i përshkueshëm.'}};
+function stateName(){
+  if(S.lysed)return 'Citolizë';
+  if(S.type==='animal')return S.V>1.05?'E fryrë':S.V<0.95?'Krenacion':'Normale';
+  return S.V>1.02?'Turgore':S.V<0.97?'Plazmolizë':'E fishkur';
+}
+function drawUI(){
+  const ci=S.lysed?S.Ce:Ci(),dr=drive(),ton=S.Ce<285?'hypo':S.Ce>315?'hyper':'iso';
+  $('ceVal').textContent=S.Ce;$('dCe').textContent=S.Ce+' mOsm/L';$('dPe').textContent='π '+fmt(S.Ce*2.479/1000,2)+' MPa';
+  $('dCi').textContent=Math.round(ci)+' mOsm/L';$('dPi').textContent='π '+fmt(ci*2.479/1000,2)+' MPa';
+  $('dV').textContent=Math.round(S.V*100)+' %';
+  $('dT').textContent=S.type==='plant'?fmt(turgor()*2.479/1000,2)+' MPa':'nuk ka mur';
+  const f=THREE.MathUtils.clamp(dr/350,-1,1),m=$('mFill');m.style.width=(Math.abs(f)*50)+'%';m.style.left=(f<0?50+f*50:50)+'%';
+  $('mTxt').textContent=S.lysed?'membrana e çarë':Math.abs(dr)<6?'ekuilibër dinamik':dr>0?'rrjedhë neto brenda':'rrjedhë neto jashtë';
+  const sn=$('stateName');sn.textContent=stateName();sn.style.color=S.lysed?'var(--warn)':'';
+  $('hudSub').textContent=S.view==='close'?'↓ hynë '+S.inN+' · ↑ dolën '+S.outN+' · neto '+(S.inN-S.outN>0?'+':'')+(S.inN-S.outN)+' H₂O':'V = '+Math.round(S.V*100)+' % · brenda '+Math.round(ci)+' mOsm/L';
+  const key=S.lysed?'lysed':ton,ex=$('explain');if(ex.dataset.k!==S.type+key){ex.dataset.k=S.type+key;ex.innerHTML=TXT[S.type][key];}
+}
+function press(seg,attr,val){seg.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset[attr]===val)));}
+function resetCell(keepCe){
+  S.V=1;S.lysed=false;S.burst=0;S.inN=0;S.outN=0;
+  if(!keepCe&&S.type==='animal'&&S.Ce<180){S.Ce=300;$('ce').value=300;}
+  sh=SHAPE[S.type];initParticles();buildCell();
+  chol.visible=glyco.visible=S.type==='animal';fibG.visible=S.type==='plant';
+}
+function setCe(v){S.Ce=v;$('ce').value=v;S.inN=0;S.outN=0;syncSolutes();}
+$('segView').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;S.view=b.dataset.v;press($('segView'),'v',S.view);cellG.visible=S.view==='cell';closeG.visible=S.view==='close';});
+$('segType').addEventListener('click',e=>{const b=e.target.closest('button');if(!b||b.dataset.t===S.type)return;S.type=b.dataset.t;press($('segType'),'t',S.type);resetCell(true);});
+$('ce').addEventListener('input',e=>setCe(+e.target.value));
+['pHypo','pIso','pHyper'].forEach(id=>$(id).addEventListener('click',e=>setCe(+e.currentTarget.dataset.ce)));
+$('bPause').addEventListener('click',e=>{S.paused=!S.paused;e.currentTarget.setAttribute('aria-pressed',String(S.paused));e.currentTarget.textContent=S.paused?'Vazhdo':'Pauzë';});
+$('bLabels').addEventListener('click',e=>{S.labels=!S.labels;e.currentTarget.setAttribute('aria-pressed',String(S.labels));});
+$('bReset').addEventListener('click',()=>resetCell(false));
+
+/* ---------- cikli ---------- */
+resetCell(true);
+let last=performance.now(),time=0,uiT=0;
+function frame(now){
+  requestAnimationFrame(frame);
+  const dt=Math.min(0.05,(now-last)/1000);last=now;
+  if(!S.paused){
+    time+=dt;stepModel(dt);
+    sCur=Math.cbrt(S.V);crenCur=S.type==='animal'?THREE.MathUtils.clamp((1-S.V)/0.5,0,1):0;
+    if(S.view==='cell')stepCell(dt);else stepClose(dt,time);
+  }
+  UM.uTime.value=time;
+  if(S.view==='cell')drawCell();else drawClose(time);
+  placeCam(dt);renderer.render(scene,camera);drawLabels(W,H);
+  if(now-uiT>120){uiT=now;drawUI();}
+}
+requestAnimationFrame(frame);
+})();
+</script>
+
+</body>
+</html>
